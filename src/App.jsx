@@ -727,7 +727,7 @@ export default function ClockGame() {
           cursor: pointer;
         }
         .score-img {
-          width: 200%;
+          width: 100%;
           height: auto;
           user-select: none;
           pointer-events: none;
