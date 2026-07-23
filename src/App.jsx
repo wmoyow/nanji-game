@@ -800,9 +800,9 @@ export default function ClockGame() {
           left: 50%;
           transform: translateX(-50%);
           animation: idleBob 2.2s ease-in-out infinite;
-          margin: 20px auto 32px;
-          width: 121%;
-          max-width: 484px;
+          margin: 20px auto 40px;
+          width: 133.1%;
+          max-width: 532px;
         }
         .idle-clock {
           position: relative;
