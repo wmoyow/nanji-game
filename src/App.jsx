@@ -1021,6 +1021,8 @@ export default function ClockGame() {
           aspect-ratio: 3349 / 801;
         }
         .level-badge {
+          position: relative;
+          z-index: 2;
           display: block;
           width: fit-content;
           margin: 10px auto 0;
