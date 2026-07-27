@@ -7,6 +7,8 @@ import HAND_MINUTE from './assets/images/hand-minute.png';
 
 import HEADER_BG from './assets/images/header-bg.png';
 import BUTTON_BG from './assets/images/button-bg.jpg';
+import BUTTON_LONG from './assets/images/button-long.png';
+import BUTTON_LONG_WHITE from './assets/images/button-long-white.png';
 import CORRECT_SOUND_SRC from './assets/audio/correct.mp3';
 import CHEER_SOUND_SRC from './assets/audio/cheer.mp3';
 import MANUKE_SOUND_SRC from './assets/audio/manuke.mp3';
@@ -989,6 +991,26 @@ export default function ClockGame() {
           width: 78%;
           font-size: 17px;
           white-space: nowrap;
+          background-image: url(${BUTTON_LONG});
+          aspect-ratio: 3349 / 801;
+        }
+        .level-badge {
+          display: block;
+          width: fit-content;
+          height: 36px;
+          margin: 10px auto 0;
+          padding: 0 26px;
+          background-image: url(${BUTTON_LONG_WHITE});
+          background-size: auto 100%;
+          background-position: center;
+          background-repeat: no-repeat;
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: 15px;
+          font-weight: 700;
+          color: #2E3A46;
+          line-height: 36px;
+          text-align: center;
+          white-space: nowrap;
         }
         .level-peek-img {
           width: 90%;
@@ -1151,6 +1173,8 @@ export default function ClockGame() {
         </div>
       ) : !finished ? (
         <>
+          <div className="level-badge">{DIFFICULTIES.find((d) => d.id === difficulty)?.label}</div>
+
           {mode === 'read' && (
             <>
               <ClockDisplay
