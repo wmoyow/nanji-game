@@ -1004,11 +1004,14 @@ export default function ClockGame() {
           background-size: auto 100%;
           background-position: center;
           background-repeat: no-repeat;
+          border: 2px solid #2E3A46;
+          border-radius: 999px;
+          box-sizing: border-box;
           font-family: 'Zen Maru Gothic', sans-serif;
           font-size: 15px;
           font-weight: 700;
           color: #2E3A46;
-          line-height: 36px;
+          line-height: 32px;
           text-align: center;
           white-space: nowrap;
         }
