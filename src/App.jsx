@@ -520,17 +520,6 @@ function InteractiveClock({
       />
       {!disabled && (
         <DragHandle
-          style={handlePosition(hourRealDeg, 21)}
-          onDrag={(x, y) => {
-            const deg = angleFromClientPoint(x, y);
-            let h = Math.round(deg / 30) % 12;
-            if (h === 0) h = 12;
-            onChangeHour(h);
-          }}
-        />
-      )}
-      {!disabled && minuteEditable && (
-        <DragHandle
           style={handlePosition(minuteRealDeg, 33)}
           onDragStart={() => {
             prevMinuteAngleRef.current = null;
@@ -539,7 +528,8 @@ function InteractiveClock({
             const deg = angleFromClientPoint(x, y);
 
             // like a real clock, spinning the minute hand all the way around
-            // carries the hour hand forward (or back) by one hour
+            // carries the hour hand forward (or back) by one hour - the hour
+            // hand itself is never dragged directly, only ever follows this
             if (prevMinuteAngleRef.current !== null) {
               const delta = deg - prevMinuteAngleRef.current;
               if (delta < -180) {
@@ -550,10 +540,12 @@ function InteractiveClock({
             }
             prevMinuteAngleRef.current = deg;
 
-            const step = minuteStep || 1;
-            let m = Math.round(deg / (6 * step)) * step;
-            m = ((m % 60) + 60) % 60;
-            onChangeMinute(m);
+            if (minuteEditable) {
+              const step = minuteStep || 1;
+              let m = Math.round(deg / (6 * step)) * step;
+              m = ((m % 60) + 60) % 60;
+              onChangeMinute(m);
+            }
           }}
         />
       )}
@@ -1183,7 +1175,7 @@ export default function ClockGame() {
         </div>
       ) : !finished ? (
         <>
-          <div className="level-badge">{DIFFICULTIES.find((d) => d.id === difficulty)?.label}</div>
+          <div className="level-badge">〜{DIFFICULTIES.find((d) => d.id === difficulty)?.label}〜</div>
 
           {mode === 'read' && (
             <>
