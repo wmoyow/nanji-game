@@ -8,7 +8,6 @@ import HAND_MINUTE from './assets/images/hand-minute.png';
 import HEADER_BG from './assets/images/header-bg.png';
 import BUTTON_BG from './assets/images/button-bg.jpg';
 import BUTTON_LONG from './assets/images/button-long.png';
-import BUTTON_LONG_WHITE from './assets/images/button-long-white.png';
 import CORRECT_SOUND_SRC from './assets/audio/correct.mp3';
 import CHEER_SOUND_SRC from './assets/audio/cheer.mp3';
 import MANUKE_SOUND_SRC from './assets/audio/manuke.mp3';
@@ -443,7 +442,7 @@ function ClockDisplay({ hour, minute, mood, animationClass, noNumbers }) {
 
 // small invisible circle placed at a hand's tip; dragging it reports the
 // pointer's position back to the parent, which converts it into an angle
-function DragHandle({ style, onDrag }) {
+function DragHandle({ style, onDrag, onDragStart }) {
   return (
     <div
       className="drag-handle"
@@ -451,6 +450,7 @@ function DragHandle({ style, onDrag }) {
       onPointerDown={(e) => {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
+        if (onDragStart) onDragStart();
       }}
       onPointerMove={(e) => onDrag(e.clientX, e.clientY)}
     />
@@ -473,6 +473,7 @@ function InteractiveClock({
   disabled,
 }) {
   const containerRef = useRef(null);
+  const prevMinuteAngleRef = useRef(null);
 
   const hourRealDeg = ((hour % 12) + (minuteEditable ? minute / 60 : 0)) * 30;
   const minuteRealDeg = minute * 6;
@@ -531,8 +532,24 @@ function InteractiveClock({
       {!disabled && minuteEditable && (
         <DragHandle
           style={handlePosition(minuteRealDeg, 33)}
+          onDragStart={() => {
+            prevMinuteAngleRef.current = null;
+          }}
           onDrag={(x, y) => {
             const deg = angleFromClientPoint(x, y);
+
+            // like a real clock, spinning the minute hand all the way around
+            // carries the hour hand forward (or back) by one hour
+            if (prevMinuteAngleRef.current !== null) {
+              const delta = deg - prevMinuteAngleRef.current;
+              if (delta < -180) {
+                onChangeHour((hour % 12) + 1);
+              } else if (delta > 180) {
+                onChangeHour(((hour + 10) % 12) + 1);
+              }
+            }
+            prevMinuteAngleRef.current = deg;
+
             const step = minuteStep || 1;
             let m = Math.round(deg / (6 * step)) * step;
             m = ((m % 60) + 60) % 60;
@@ -997,21 +1014,11 @@ export default function ClockGame() {
         .level-badge {
           display: block;
           width: fit-content;
-          height: 36px;
           margin: 10px auto 0;
-          padding: 0 26px;
-          background-image: url(${BUTTON_LONG_WHITE});
-          background-size: auto 100%;
-          background-position: center;
-          background-repeat: no-repeat;
-          border: 2px solid #2E3A46;
-          border-radius: 999px;
-          box-sizing: border-box;
           font-family: 'Zen Maru Gothic', sans-serif;
-          font-size: 15px;
+          font-size: 10.5px;
           font-weight: 700;
           color: #2E3A46;
-          line-height: 32px;
           text-align: center;
           white-space: nowrap;
         }
