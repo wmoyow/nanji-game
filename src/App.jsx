@@ -518,7 +518,23 @@ function InteractiveClock({
         draggable={false}
         style={{ transform: `rotate(${hourAngle}deg)`, transformOrigin: `${PIVOT_X}% ${PIVOT_Y}%` }}
       />
-      {!disabled && (
+      {!disabled && !minuteEditable && (
+        // easy difficulty: minute is always 0, so the hour hand is simply
+        // dragged directly into place
+        <DragHandle
+          style={handlePosition(hourRealDeg, 21)}
+          onDrag={(x, y) => {
+            const deg = angleFromClientPoint(x, y);
+            let h = Math.round(deg / 30) % 12;
+            if (h === 0) h = 12;
+            onChangeHour(h);
+          }}
+        />
+      )}
+      {!disabled && minuteEditable && (
+        // other difficulties: only the minute hand is draggable, and the hour
+        // hand follows it automatically (creep + full-lap rollover), just
+        // like a real clock - it can never be touched directly
         <DragHandle
           style={handlePosition(minuteRealDeg, 33)}
           onDragStart={() => {
@@ -526,26 +542,25 @@ function InteractiveClock({
           }}
           onDrag={(x, y) => {
             const deg = angleFromClientPoint(x, y);
+            const step = minuteStep || 1;
+            let m = Math.round(deg / (6 * step)) * step;
+            m = ((m % 60) + 60) % 60;
 
-            // like a real clock, spinning the minute hand all the way around
-            // carries the hour hand forward (or back) by one hour - the hour
-            // hand itself is never dragged directly, only ever follows this
+            // compare the snapped minute (not the raw angle) so the hour
+            // carries over in the exact same update as the minute reset -
+            // otherwise the minute can already read 0 for a frame before the
+            // wrap is detected, making the hour hand visibly hop backward
             if (prevMinuteAngleRef.current !== null) {
-              const delta = deg - prevMinuteAngleRef.current;
-              if (delta < -180) {
+              const diff = m - prevMinuteAngleRef.current;
+              if (diff <= -30) {
                 onChangeHour((hour % 12) + 1);
-              } else if (delta > 180) {
+              } else if (diff >= 30) {
                 onChangeHour(((hour + 10) % 12) + 1);
               }
             }
-            prevMinuteAngleRef.current = deg;
+            prevMinuteAngleRef.current = m;
 
-            if (minuteEditable) {
-              const step = minuteStep || 1;
-              let m = Math.round(deg / (6 * step)) * step;
-              m = ((m % 60) + 60) % 60;
-              onChangeMinute(m);
-            }
+            onChangeMinute(m);
           }}
         />
       )}
