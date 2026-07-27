@@ -883,6 +883,8 @@ export default function ClockGame() {
           opacity: 0.7;
         }
         .target-time-text {
+          position: relative;
+          z-index: 2;
           font-family: 'Zen Maru Gothic', sans-serif;
           font-size: 30px;
           font-weight: 700;
