@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 
 import CLOCK_FACE_NEUTRAL from './assets/images/clock-face-neutral.jpg';
 import CLOCK_FACE_HAPPY from './assets/images/clock-face-happy.jpg';
@@ -59,6 +59,12 @@ const DIFFICULTIES = [
   { id: 'challenge', label: 'チャレンジ' },
 ];
 
+const MODES = [
+  { id: 'read', label: 'とけいをよむ' },
+  { id: 'choose', label: 'とけいをえらぶ' },
+  { id: 'set', label: 'とけいをあわせる' },
+];
+
 function randomMinute(difficulty) {
   if (difficulty === 'easy') return 0;
   if (difficulty === 'normal') return Math.floor(Math.random() * 12) * 5; // 0,5,10...55
@@ -84,6 +90,22 @@ function makeChoices(correctHour, correctMinute, difficulty) {
     choices.add(formatAnswer(h, m));
   }
   return Array.from(choices).sort(() => Math.random() - 0.5);
+}
+
+// like makeChoices, but returns {hour, minute} pairs so each choice can be
+// rendered as an actual clock face (used by the "とけいをえらぶ" mode)
+function makeTimeChoices(correctHour, correctMinute, difficulty) {
+  const seen = new Set([formatAnswer(correctHour, correctMinute)]);
+  const result = [{ hour: correctHour, minute: correctMinute }];
+  while (result.length < 4) {
+    const h = HOURS[Math.floor(Math.random() * HOURS.length)];
+    const m = randomMinute(difficulty);
+    const key = formatAnswer(h, m);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ hour: h, minute: m });
+  }
+  return result.sort(() => Math.random() - 0.5);
 }
 
 // plays the user-provided correct-answer sound clip via the Web Audio API
@@ -417,6 +439,116 @@ function ClockDisplay({ hour, minute, mood, animationClass, noNumbers }) {
   );
 }
 
+// small invisible circle placed at a hand's tip; dragging it reports the
+// pointer's position back to the parent, which converts it into an angle
+function DragHandle({ style, onDrag }) {
+  return (
+    <div
+      className="drag-handle"
+      style={style}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => onDrag(e.clientX, e.clientY)}
+    />
+  );
+}
+
+// the clock used by "とけいをあわせる": same face/hand art as ClockDisplay, but
+// the hour and minute hands can be dragged into place via invisible handles
+// positioned at each hand's tip
+function InteractiveClock({
+  hour,
+  minute,
+  onChangeHour,
+  onChangeMinute,
+  minuteEditable,
+  minuteStep,
+  mood,
+  animationClass,
+  noNumbers,
+  disabled,
+}) {
+  const containerRef = useRef(null);
+
+  const hourRealDeg = ((hour % 12) + (minuteEditable ? minute / 60 : 0)) * 30;
+  const minuteRealDeg = minute * 6;
+  const hourAngle = hourRealDeg - 180;
+  const minuteAngle = minuteRealDeg;
+
+  const faceSrc = noNumbers
+    ? (mood === 'happy' ? CLOCK_FACE_HAPPY_NONUM : CLOCK_FACE_NEUTRAL_NONUM)
+    : (mood === 'happy' ? CLOCK_FACE_HAPPY : CLOCK_FACE_NEUTRAL);
+
+  function angleFromClientPoint(clientX, clientY) {
+    const rect = containerRef.current.getBoundingClientRect();
+    const cx = rect.left + rect.width * (PIVOT_X / 100);
+    const cy = rect.top + rect.height * (PIVOT_Y / 100);
+    let deg = Math.atan2(clientX - cx, cy - clientY) * (180 / Math.PI);
+    if (deg < 0) deg += 360;
+    return deg;
+  }
+
+  function handlePosition(deg, radiusPercent) {
+    const rad = (deg * Math.PI) / 180;
+    return {
+      left: `${PIVOT_X + radiusPercent * Math.sin(rad)}%`,
+      top: `${PIVOT_Y - radiusPercent * Math.cos(rad)}%`,
+    };
+  }
+
+  return (
+    <div className={`clock-display ${animationClass || ''}`} ref={containerRef}>
+      <img src={faceSrc} className="layer face-layer" alt="とけいのかお" draggable={false} />
+      <img
+        src={HAND_MINUTE}
+        className="layer hand-layer"
+        alt="ちょうしん"
+        draggable={false}
+        style={{ transform: `rotate(${minuteAngle}deg)`, transformOrigin: `${PIVOT_X}% ${PIVOT_Y}%` }}
+      />
+      <img
+        src={HAND_HOUR}
+        className="layer hand-layer"
+        alt="たんしん"
+        draggable={false}
+        style={{ transform: `rotate(${hourAngle}deg)`, transformOrigin: `${PIVOT_X}% ${PIVOT_Y}%` }}
+      />
+      {!disabled && (
+        <DragHandle
+          style={handlePosition(hourRealDeg, 21)}
+          onDrag={(x, y) => {
+            const deg = angleFromClientPoint(x, y);
+            let h = Math.round(deg / 30) % 12;
+            if (h === 0) h = 12;
+            onChangeHour(h);
+          }}
+        />
+      )}
+      {!disabled && minuteEditable && (
+        <DragHandle
+          style={handlePosition(minuteRealDeg, 33)}
+          onDrag={(x, y) => {
+            const deg = angleFromClientPoint(x, y);
+            const step = minuteStep || 1;
+            let m = Math.round(deg / (6 * step)) * step;
+            m = ((m % 60) + 60) % 60;
+            onChangeMinute(m);
+          }}
+        />
+      )}
+      {mood === 'happy' && (
+        <div className="sparkles">
+          <span>✦</span>
+          <span>✦</span>
+          <span>✦</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // decorative clock for the title screen: gently bobs up and down, hands spin continuously
 function IdleClock() {
   return (
@@ -450,8 +582,11 @@ function IdleClock() {
 export default function ClockGame() {
   const [started, setStarted] = useState(false); // false = on the home/title screen
   const [difficulty, setDifficulty] = useState(null); // null = on the difficulty menu
+  const [mode, setMode] = useState(null); // null = on the mode menu; 'read' | 'choose' | 'set'
   const [time, setTime] = useState({ hour: 12, minute: 0 });
-  const [choices, setChoices] = useState([]);
+  const [choices, setChoices] = useState([]); // text choices, used by 'read' mode
+  const [timeChoices, setTimeChoices] = useState([]); // {hour,minute} choices, used by 'choose' mode
+  const [guess, setGuess] = useState({ hour: 12, minute: 0 }); // user's hand placement in 'set' mode
   const [feedback, setFeedback] = useState(null); // 'correct' | 'wrong' | null
   const [results, setResults] = useState(Array(TOTAL_ROUNDS).fill(null));
   const [roundIndex, setRoundIndex] = useState(0); // 0-based
@@ -459,11 +594,11 @@ export default function ClockGame() {
   const [finished, setFinished] = useState(false);
 
   // switch BGM track automatically based on which screen is showing:
-  // home screen + level-select screen share one track, quiz + result share another
+  // home/level-select/mode-select screens share one track, quiz + result share another
   useEffect(() => {
-    const onGameScreen = started && difficulty !== null;
+    const onGameScreen = started && difficulty !== null && mode !== null;
     playBGMTrack(onGameScreen ? 'game' : 'home');
-  }, [started, difficulty]);
+  }, [started, difficulty, mode]);
 
   // browsers block audio until the very first user gesture on the page, so as soon
   // as that happens (tap/click/key anywhere) we resume the audio context immediately
@@ -489,7 +624,7 @@ export default function ClockGame() {
     };
   }, []);
 
-  const newRound = useCallback((diff) => {
+  const newRound = useCallback((diff, currentMode) => {
     setTime((prevTime) => {
       let t = randomTime(diff);
       let guard = 0;
@@ -498,7 +633,13 @@ export default function ClockGame() {
         t = randomTime(diff);
         guard += 1;
       }
-      setChoices(makeChoices(t.hour, t.minute, diff));
+      if (currentMode === 'choose') {
+        setTimeChoices(makeTimeChoices(t.hour, t.minute, diff));
+      } else if (currentMode === 'set') {
+        setGuess({ hour: 12, minute: 0 });
+      } else {
+        setChoices(makeChoices(t.hour, t.minute, diff));
+      }
       return t;
     });
     setFeedback(null);
@@ -507,17 +648,21 @@ export default function ClockGame() {
 
   function handleSelectDifficulty(id) {
     setDifficulty(id);
+  }
+
+  function handleSelectMode(id) {
+    setMode(id);
     setResults(Array(TOTAL_ROUNDS).fill(null));
     setRoundIndex(0);
     setFinished(false);
-    newRound(id);
+    newRound(difficulty, id);
   }
 
-  function handleChoice(choice) {
-    if (locked || finished) return;
-    const correct = formatAnswer(time.hour, time.minute);
+  // shared by all three modes once we know whether the round's answer was
+  // correct: handles scoring, feedback, sounds, and advancing to the next round
+  function resolveAnswer(isCorrect) {
     setLocked(true);
-    if (choice === correct) {
+    if (isCorrect) {
       setFeedback('correct');
       playCorrectSound();
       setResults((prev) => {
@@ -542,7 +687,7 @@ export default function ClockGame() {
           setFinished(true);
         } else {
           setRoundIndex((r) => r + 1);
-          newRound(difficulty);
+          newRound(difficulty, mode);
         }
       }, 1200);
     } else {
@@ -557,22 +702,41 @@ export default function ClockGame() {
     }
   }
 
+  function handleChoice(choice) {
+    if (locked || finished) return;
+    const correct = formatAnswer(time.hour, time.minute);
+    resolveAnswer(choice === correct);
+  }
+
+  function handleCheckSet() {
+    if (locked || finished) return;
+    resolveAnswer(guess.hour === time.hour && guess.minute === time.minute);
+  }
+
   function handleRestart() {
-    setDifficulty(null);
+    setMode(null);
+  }
+
+  function handleBackToModeSelect() {
+    setMode(null);
   }
 
   function handleBackToMenu() {
     setDifficulty(null);
+    setMode(null);
   }
 
   function handleBackToHome() {
     setStarted(false);
     setDifficulty(null);
+    setMode(null);
   }
 
   const mood = feedback === 'correct' ? 'happy' : 'neutral';
   const correctCount = results.filter((r) => r === 'correct').length;
   const isChallenge = difficulty === 'challenge';
+  const minuteEditable = difficulty !== 'easy';
+  const minuteStep = difficulty === 'normal' ? 5 : 1;
 
   return (
     <div className={`wrap ${finished ? 'wrap-result' : ''}`}>
@@ -692,6 +856,59 @@ export default function ClockGame() {
         .choice-btn:disabled {
           opacity: 0.7;
         }
+        .target-time-text {
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: 30px;
+          font-weight: 700;
+          color: #2E3A46;
+          text-align: center;
+          margin: 12px auto 0;
+        }
+        .clock-choices {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px 12px;
+          width: 100%;
+          max-width: 320px;
+          margin: 18px auto 0;
+        }
+        .clock-choice-btn {
+          border: 3px solid transparent;
+          border-radius: 18px;
+          background: #F5F7FA;
+          padding: 8px;
+          cursor: pointer;
+          transition: transform 0.08s ease;
+        }
+        .clock-choice-btn .clock-display {
+          margin: 0;
+        }
+        .clock-choice-btn:active {
+          transform: scale(0.97);
+        }
+        .clock-choice-btn:disabled {
+          opacity: 0.7;
+        }
+        .dekita-btn {
+          display: block;
+          width: 55%;
+          margin: 24px auto 0;
+        }
+        .drag-handle {
+          position: absolute;
+          width: 44px;
+          height: 44px;
+          transform: translate(-50%, -50%);
+          border-radius: 50%;
+          background: rgba(46, 58, 70, 0.14);
+          border: 2px dashed rgba(46, 58, 70, 0.35);
+          touch-action: none;
+          cursor: grab;
+        }
+        .drag-handle:active {
+          cursor: grabbing;
+          background: rgba(46, 58, 70, 0.24);
+        }
         .feedback-msg {
           margin-top: 16px;
           font-weight: 700;
@@ -767,6 +984,11 @@ export default function ClockGame() {
           width: 50%;
           font-size: 19px;
           margin: 0 auto;
+        }
+        .mode-choices .choice-btn {
+          width: 78%;
+          font-size: 17px;
+          white-space: nowrap;
         }
         .level-peek-img {
           width: 90%;
@@ -864,7 +1086,7 @@ export default function ClockGame() {
         </>
       ) : (
         <>
-          {difficulty === null ? (
+          {difficulty === null || mode === null ? (
             <img
               src={TITLE_IMG}
               className="level-title-img"
@@ -901,35 +1123,108 @@ export default function ClockGame() {
             draggable={false}
           />
         </div>
-      ) : !finished ? (
-        <>
-          <ClockDisplay
-            hour={time.hour}
-            minute={time.minute}
-            mood={mood}
-            animationClass={feedback === 'correct' ? 'bounce' : feedback === 'wrong' ? 'shake' : ''}
-            noNumbers={isChallenge}
-          />
-
-          <div className="choices">
-            {choices.map((c) => (
+      ) : mode === null ? (
+        <div className="menu-card">
+          <div className="choices menu-choices mode-choices">
+            {MODES.map((m) => (
               <button
-                key={c}
+                key={m.id}
                 className="choice-btn"
-                onClick={() => handleChoice(c)}
-                disabled={locked}
+                onClick={() => {
+                  playTapSound();
+                  handleSelectMode(m.id);
+                }}
               >
-                {c}
+                {m.label}
               </button>
             ))}
           </div>
+          <button className="back-link" onClick={handleBackToMenu}>
+            ◀︎ もどる
+          </button>
+          <img
+            src={LEVEL_PEEK_IMG}
+            className="level-peek-img"
+            alt=""
+            draggable={false}
+          />
+        </div>
+      ) : !finished ? (
+        <>
+          {mode === 'read' && (
+            <>
+              <ClockDisplay
+                hour={time.hour}
+                minute={time.minute}
+                mood={mood}
+                animationClass={feedback === 'correct' ? 'bounce' : feedback === 'wrong' ? 'shake' : ''}
+                noNumbers={isChallenge}
+              />
+
+              <div className="choices">
+                {choices.map((c) => (
+                  <button
+                    key={c}
+                    className="choice-btn"
+                    onClick={() => handleChoice(c)}
+                    disabled={locked}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {mode === 'choose' && (
+            <>
+              <div className="target-time-text">{formatAnswer(time.hour, time.minute)}</div>
+              <div className="clock-choices">
+                {timeChoices.map((c, i) => (
+                  <button
+                    key={i}
+                    className="clock-choice-btn"
+                    onClick={() => handleChoice(formatAnswer(c.hour, c.minute))}
+                    disabled={locked}
+                  >
+                    <ClockDisplay hour={c.hour} minute={c.minute} mood="neutral" noNumbers={isChallenge} />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {mode === 'set' && (
+            <>
+              <div className="target-time-text">{formatAnswer(time.hour, time.minute)}</div>
+              <InteractiveClock
+                hour={guess.hour}
+                minute={guess.minute}
+                onChangeHour={(h) => setGuess((g) => ({ ...g, hour: h }))}
+                onChangeMinute={(m) => setGuess((g) => ({ ...g, minute: m }))}
+                minuteEditable={minuteEditable}
+                minuteStep={minuteStep}
+                mood={mood}
+                animationClass={feedback === 'correct' ? 'bounce' : feedback === 'wrong' ? 'shake' : ''}
+                noNumbers={isChallenge}
+                disabled={locked}
+              />
+              <button
+                className="choice-btn dekita-btn"
+                onClick={handleCheckSet}
+                disabled={locked}
+              >
+                できた！
+              </button>
+            </>
+          )}
 
           <div className={`feedback-msg ${feedback || ''}`}>
             {feedback === 'correct' && 'せいかい！すごいね！'}
             {feedback === 'wrong' && 'おしい！もういちど！'}
           </div>
 
-          <button className="back-link" onClick={handleBackToMenu}>
+          <button className="back-link" onClick={handleBackToModeSelect}>
             ◀︎ もどる
           </button>
         </>
