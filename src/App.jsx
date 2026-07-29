@@ -54,17 +54,21 @@ const STAR_SIZE = 5.28; // percent of header width (60% smaller than before)
 const TOTAL_ROUNDS = 10;
 
 const DIFFICULTIES = [
-  { id: 'easy', label: 'やさしい' },
+  { id: 'easy', label: 'かんたん' },
   { id: 'normal', label: 'ふつう' },
   { id: 'hard', label: 'むずかしい' },
-  { id: 'challenge', label: 'チャレンジ' },
+  { id: 'challenge', label: 'げきむず' },
 ];
 
 const MODES = [
   { id: 'read', label: 'とけいをよむ' },
   { id: 'choose', label: 'とけいをえらぶ' },
   { id: 'set', label: 'とけいをあわせる' },
+  { id: 'mix', label: 'ミックスチャレンジ' },
 ];
+
+// the three "real" gameplay modes that ミックスチャレンジ picks between each round
+const MIX_SUB_MODES = ['read', 'choose', 'set'];
 
 function randomMinute(difficulty) {
   if (difficulty === 'easy') return 0;
@@ -608,7 +612,8 @@ function IdleClock() {
 export default function ClockGame() {
   const [started, setStarted] = useState(false); // false = on the home/title screen
   const [difficulty, setDifficulty] = useState(null); // null = on the difficulty menu
-  const [mode, setMode] = useState(null); // null = on the mode menu; 'read' | 'choose' | 'set'
+  const [mode, setMode] = useState(null); // null = on the mode menu; 'read' | 'choose' | 'set' | 'mix'
+  const [roundMode, setRoundMode] = useState('read'); // the mode actually used for the current round (mix picks a fresh one each round)
   const [time, setTime] = useState({ hour: 12, minute: 0 });
   const [choices, setChoices] = useState([]); // text choices, used by 'read' mode
   const [timeChoices, setTimeChoices] = useState([]); // {hour,minute} choices, used by 'choose' mode
@@ -651,6 +656,13 @@ export default function ClockGame() {
   }, []);
 
   const newRound = useCallback((diff, currentMode) => {
+    // ミックスチャレンジ picks a fresh sub-mode (よむ/えらぶ/あわせる) every round;
+    // the other modes just use themselves for every round
+    const actualMode = currentMode === 'mix'
+      ? MIX_SUB_MODES[Math.floor(Math.random() * MIX_SUB_MODES.length)]
+      : currentMode;
+    setRoundMode(actualMode);
+
     setTime((prevTime) => {
       let t = randomTime(diff);
       let guard = 0;
@@ -659,9 +671,9 @@ export default function ClockGame() {
         t = randomTime(diff);
         guard += 1;
       }
-      if (currentMode === 'choose') {
+      if (actualMode === 'choose') {
         setTimeChoices(makeTimeChoices(t.hour, t.minute, diff));
-      } else if (currentMode === 'set') {
+      } else if (actualMode === 'set') {
         setGuess({ hour: 12, minute: 0 });
       } else {
         setChoices(makeChoices(t.hour, t.minute, diff));
@@ -1196,7 +1208,7 @@ export default function ClockGame() {
         <>
           <div className="level-badge">〜{DIFFICULTIES.find((d) => d.id === difficulty)?.label}〜</div>
 
-          {mode === 'read' && (
+          {roundMode === 'read' && (
             <>
               <ClockDisplay
                 hour={time.hour}
@@ -1221,7 +1233,7 @@ export default function ClockGame() {
             </>
           )}
 
-          {mode === 'choose' && (
+          {roundMode === 'choose' && (
             <>
               <div className="target-time-text">{formatAnswer(time.hour, time.minute)}</div>
               <div className="clock-choices">
@@ -1239,7 +1251,7 @@ export default function ClockGame() {
             </>
           )}
 
-          {mode === 'set' && (
+          {roundMode === 'set' && (
             <>
               <div className="target-time-text">{formatAnswer(time.hour, time.minute)}</div>
               <InteractiveClock
