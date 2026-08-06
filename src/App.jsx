@@ -345,6 +345,14 @@ function playBGMTrack(key) {
   }
 }
 
+// tiny buzz for each notch of hand movement in とけいをあわせる
+// (silently does nothing where the Vibration API isn't supported, e.g. iOS Safari)
+function vibrateTick() {
+  if (navigator.vibrate) {
+    navigator.vibrate(10);
+  }
+}
+
 // low double "buzz" for wrong answers
 let sharedAudioCtx = null;
 function playWrongSound() {
@@ -1257,8 +1265,14 @@ export default function ClockGame() {
               <InteractiveClock
                 hour={guess.hour}
                 minute={guess.minute}
-                onChangeHour={(h) => setGuess((g) => ({ ...g, hour: h }))}
-                onChangeMinute={(m) => setGuess((g) => ({ ...g, minute: m }))}
+                onChangeHour={(h) => {
+                  if (h !== guess.hour) vibrateTick();
+                  setGuess((g) => ({ ...g, hour: h }));
+                }}
+                onChangeMinute={(m) => {
+                  if (m !== guess.minute) vibrateTick();
+                  setGuess((g) => ({ ...g, minute: m }));
+                }}
                 minuteEditable={minuteEditable}
                 minuteStep={minuteStep}
                 mood={mood}
